@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, X, Trash2, Pencil, Check, FileText, FileDown, Sun, Moon, MessageSquare } from 'lucide-react';
+import { Plus, Search, X, Trash2, Pencil, Check, FileText, FileDown, Sun, Moon, MessageSquare, MoreVertical } from 'lucide-react';
 import { useChat } from '@/context/ChatContext';
 import { useTheme } from '@/context/ThemeContext';
 import { formatDate, truncateText } from '@/lib/utils';
@@ -168,9 +168,11 @@ function ChatItem({ conversation, isActive, onSelect, onDelete, onRename }: {
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title);
+  const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [showExport, setShowExport] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -186,6 +188,18 @@ function ChatItem({ conversation, isActive, onSelect, onDelete, onRename }: {
     }
   }, [confirmDelete]);
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showMenu]);
+
   const handleSaveRename = () => {
     if (editTitle.trim()) {
       onRename(editTitle.trim());
@@ -196,8 +210,23 @@ function ChatItem({ conversation, isActive, onSelect, onDelete, onRename }: {
   const handleDelete = () => {
     if (confirmDelete) {
       onDelete();
+      setShowMenu(false);
     } else {
       setConfirmDelete(true);
+    }
+  };
+
+  // Long press for mobile
+  const handleTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      setShowMenu(true);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
 
@@ -222,9 +251,15 @@ function ChatItem({ conversation, isActive, onSelect, onDelete, onRename }: {
           <button onClick={handleSaveRename} className="p-1 text-green-500"><Check className="w-4 h-4" /></button>
         </div>
       ) : (
-        <div onClick={onSelect} className="px-3 py-2.5">
-          <div className="text-sm text-sidebar-foreground truncate pr-16">
-            {truncateText(conversation.title, 30)}
+        <div
+          onClick={onSelect}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          className="px-3 py-2.5 pr-10"
+        >
+          <div className="text-sm text-sidebar-foreground truncate">
+            {truncateText(conversation.title, 28)}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">
             {formatDate(conversation.updatedAt)}
@@ -232,53 +267,56 @@ function ChatItem({ conversation, isActive, onSelect, onDelete, onRename }: {
         </div>
       )}
 
-      {/* Action Buttons */}
+      {/* Menu Button - always visible */}
       {!isEditing && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditTitle(conversation.title); }}
-            className="p-1 rounded hover:bg-surface-hover text-muted-foreground"
-            title="Ubah nama"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowExport(!showExport); }}
-            className="p-1 rounded hover:bg-surface-hover text-muted-foreground"
-            title="Ekspor"
-          >
-            <FileDown className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-            className={`p-1 rounded transition-colors ${confirmDelete ? 'bg-red-100 dark:bg-red-900/30 text-red-500' : 'hover:bg-surface-hover text-muted-foreground'}`}
-            title={confirmDelete ? 'Klik lagi untuk hapus' : 'Hapus'}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); setConfirmDelete(false); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground transition-all md:opacity-0 md:group-hover:opacity-100"
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
       )}
 
-      {/* Export Dropdown */}
+      {/* Dropdown Menu */}
       <AnimatePresence>
-        {showExport && (
+        {showMenu && (
           <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="absolute right-2 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg z-20 py-1 min-w-[140px]"
+            ref={menuRef}
+            initial={{ opacity: 0, scale: 0.9, y: -5 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -5 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-2 top-full mt-1 bg-surface border border-border rounded-xl shadow-2xl z-30 py-1.5 min-w-[160px]"
           >
             <button
-              onClick={(e) => { e.stopPropagation(); exportToMarkdown(conversation); setShowExport(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-hover"
+              onClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditTitle(conversation.title); setShowMenu(false); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
             >
-              <FileText className="w-4 h-4" /> Markdown
+              <Pencil className="w-4 h-4 text-blue-500" /> Ubah Nama
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); exportToPDF(conversation); setShowExport(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-hover"
+              onClick={(e) => { e.stopPropagation(); exportToMarkdown(conversation); setShowMenu(false); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
             >
-              <FileDown className="w-4 h-4" /> PDF
+              <FileText className="w-4 h-4 text-green-500" /> Ekspor Markdown
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); exportToPDF(conversation); setShowMenu(false); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
+            >
+              <FileDown className="w-4 h-4 text-purple-500" /> Ekspor PDF
+            </button>
+            <div className="border-t border-border my-1" />
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors ${
+                confirmDelete
+                  ? 'text-red-500 bg-red-50 dark:bg-red-900/20 font-medium'
+                  : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+              {confirmDelete ? 'Ketuk lagi untuk hapus' : 'Hapus Chat'}
             </button>
           </motion.div>
         )}

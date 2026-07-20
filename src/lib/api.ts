@@ -60,8 +60,17 @@ export async function* streamChat(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    throw new Error(`API Error (${response.status}): ${errorText}`);
+    if (response.status === 401) {
+      throw new Error('API Key tidak valid. Pastikan API Key sudah benar di pengaturan.');
+    } else if (response.status === 429) {
+      throw new Error('Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi ya! ⏳');
+    } else if (response.status === 500) {
+      throw new Error('Server AI sedang bermasalah. Coba lagi nanti ya! 🔧');
+    } else if (response.status === 503) {
+      throw new Error('Server AI sedang sibuk. Coba lagi dalam beberapa saat. 🔄');
+    } else {
+      throw new Error(`Terjadi kesalahan (${response.status}). Coba lagi nanti.`);
+    }
   }
 
   const reader = response.body?.getReader();
