@@ -12,7 +12,7 @@ export function Header() {
 
   const title = activeConversation
     ? truncateText(activeConversation.title, 30)
-    : 'AI Tutor SD';
+    : 'Cerdasik';
 
   return (
     <header className="h-14 shrink-0 flex items-center justify-between px-4 border-b border-border glass z-30">

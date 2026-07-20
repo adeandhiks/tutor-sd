@@ -405,7 +405,7 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
         </div>
 
         <p className="text-[11px] text-muted-foreground text-center mt-2">
-          AI Tutor SD — Asisten belajar untuk siswa Sekolah Dasar 🎓
+          Cerdasik — Belajar jadi mudah, pintar jadi seru! 🎓
         </p>
       </div>
 

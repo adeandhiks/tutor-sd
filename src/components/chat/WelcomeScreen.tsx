@@ -21,17 +21,17 @@ export function WelcomeScreen() {
         <motion.div
           animate={{ y: [0, -6, 0] }}
           transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          className="text-6xl mb-4"
+          className="mb-4"
         >
-          🎓
+          <img src="/logo.png" alt="Cerdasik" className="w-20 h-20 mx-auto rounded-2xl shadow-lg" />
         </motion.div>
-        <h1 className="text-3xl md:text-4xl font-bold mb-3 font-[var(--font-heading)]">
-          <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-            Halo! Aku Asisten Belajarmu
+        <h1 className="text-3xl md:text-4xl font-bold mb-3">
+          <span className="bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 bg-clip-text text-transparent">
+            Cerdasik
           </span>
         </h1>
         <p className="text-muted-foreground text-base md:text-lg max-w-md mx-auto">
-          Tanyakan apa saja tentang pelajaran sekolah! 📚
+          Belajar jadi mudah, pintar jadi seru! 📚
         </p>
         <div className="flex items-center justify-center gap-2 mt-3 text-sm text-muted-foreground">
           <Sparkles className="w-4 h-4 text-amber-500" />

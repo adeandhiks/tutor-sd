@@ -32,11 +32,14 @@ export function Sidebar() {
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold">
-            <span className="bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-              🎓 AI Tutor SD
-            </span>
-          </h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="Cerdasik" className="w-8 h-8 rounded-lg" />
+            <h1 className="text-lg font-bold">
+              <span className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
+                Cerdasik
+              </span>
+            </h1>
+          </div>
           <div className="flex items-center gap-1">
             <button
               onClick={createNewChat}
