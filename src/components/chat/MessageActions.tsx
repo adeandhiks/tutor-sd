@@ -35,22 +35,24 @@ export function MessageActions({ message, isLast }: MessageActionsProps) {
   };
 
   return (
-    <div className="flex items-center gap-1 mt-1 ml-11 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+    <div className="flex items-center gap-1 mt-1 ml-11 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
       <button
         onClick={handleCopy}
-        className="p-1.5 rounded-lg hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors text-xs"
         title="Salin jawaban"
       >
         {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+        <span className="md:hidden">{copied ? 'Disalin!' : 'Salin'}</span>
       </button>
 
       {isLast && !isGenerating && (
         <button
           onClick={handleRegenerate}
-          className="p-1.5 rounded-lg hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors text-xs"
           title="Buat ulang jawaban"
         >
           <RefreshCw className="w-3.5 h-3.5" />
+          <span className="md:hidden">Ulangi</span>
         </button>
       )}
     </div>
