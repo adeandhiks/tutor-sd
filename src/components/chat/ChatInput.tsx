@@ -2,12 +2,12 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import { SendHorizonal, ImagePlus, Mic, MicOff, X, Square, Camera } from 'lucide-react';
+import { SendHorizonal, ImagePlus, Mic, MicOff, X, Square, Camera, FileText, Loader2 } from 'lucide-react';
 import { CameraModal } from './CameraModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChat } from '@/context/ChatContext';
 import { ImageAttachment } from '@/lib/types';
-import { generateId, fileToBase64, validateImageFile } from '@/lib/utils';
+import { generateId, fileToBase64, validateImageFile, validateDocumentFile } from '@/lib/utils';
 import { toast } from '@/components/shared/Toast';
 
 // Web Speech API types
@@ -45,16 +45,26 @@ interface ChatInputProps {
   droppedImages?: ImageAttachment[];
 }
 
+interface DocAttachment {
+  id: string;
+  name: string;
+  text: string;
+  truncated: boolean;
+}
+
 export function ChatInput({ droppedImages }: ChatInputProps) {
   const { sendMessage, isGenerating, stopGenerating } = useChat();
   const [text, setText] = useState('');
   const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [docs, setDocs] = useState<DocAttachment[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [showCamera, setShowCamera] = useState(false);
+  const [isParsingDoc, setIsParsingDoc] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -67,17 +77,74 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
     }
   }, [droppedImages]);
 
-  const handleSubmit = useCallback(async () => {
-    if ((!text.trim() && images.length === 0) || isGenerating) return;
+  // Document upload handler
+  const handleDocUpload = async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      const validation = validateDocumentFile(file);
+      if (!validation.valid) {
+        toast(validation.error || 'File tidak valid', 'error');
+        continue;
+      }
 
-    const currentText = text;
+      setIsParsingDoc(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/parse', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) {
+          toast(data.error || 'Gagal membaca dokumen', 'error');
+          continue;
+        }
+
+        setDocs(prev => [...prev, {
+          id: generateId(),
+          name: file.name,
+          text: data.text,
+          truncated: data.truncated || false,
+        }]);
+        toast(`📄 ${file.name} berhasil dimuat!`, 'success');
+      } catch {
+        toast('Gagal memproses dokumen', 'error');
+      } finally {
+        setIsParsingDoc(false);
+      }
+    }
+  };
+
+  const handleDocSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      handleDocUpload(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  const removeDoc = (id: string) => {
+    setDocs(prev => prev.filter(d => d.id !== id));
+  };
+
+  const handleSubmit = useCallback(async () => {
+    if ((!text.trim() && images.length === 0 && docs.length === 0) || isGenerating) return;
+
+    // Build message text — prepend document contents
+    let messageText = text;
+    if (docs.length > 0) {
+      const docTexts = docs.map(d =>
+        `📄 [Isi dokumen "${d.name}"]:\n${d.text}${d.truncated ? '\n(... dokumen terlalu panjang, terpotong)' : ''}`
+      ).join('\n\n');
+      messageText = docTexts + (text.trim() ? `\n\n${text}` : '\n\nTolong bantu saya memahami isi dokumen ini.');
+    }
+
     const currentImages = images.length > 0 ? [...images] : undefined;
 
     setText('');
     setImages([]);
+    setDocs([]);
 
-    await sendMessage(currentText, currentImages);
-  }, [text, images, isGenerating, sendMessage]);
+    await sendMessage(messageText, currentImages);
+  }, [text, images, docs, isGenerating, sendMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -298,6 +365,60 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
           )}
         </AnimatePresence>
 
+        {/* Document Previews */}
+        <AnimatePresence>
+          {docs.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-3"
+            >
+              <div className="flex flex-wrap gap-2">
+                {docs.map((doc) => (
+                  <motion.div
+                    key={doc.id}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                  >
+                    <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-foreground truncate max-w-[150px]">{doc.name}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {doc.text.length.toLocaleString()} karakter
+                        {doc.truncated && ' (terpotong)'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeDoc(doc.id)}
+                      className="p-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-300 dark:hover:bg-blue-700 transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Parsing Indicator */}
+        <AnimatePresence>
+          {isParsingDoc && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="mb-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+            >
+              <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+              <span className="text-sm text-blue-600 dark:text-blue-400">Membaca dokumen...</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Recording Indicator with Live Transcript */}
         <AnimatePresence>
           {isRecording && (
@@ -349,6 +470,24 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
             onChange={handleFileSelect}
           />
 
+          {/* Document Upload */}
+          <button
+            onClick={() => docInputRef.current?.click()}
+            disabled={isParsingDoc}
+            className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors mb-0.5 disabled:opacity-40"
+            title="Upload dokumen (PDF, Word, Excel, PPT)"
+          >
+            {isParsingDoc ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+          </button>
+          <input
+            ref={docInputRef}
+            type="file"
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt"
+            multiple
+            className="hidden"
+            onChange={handleDocSelect}
+          />
+
           {/* Camera Capture */}
           <button
             onClick={() => setShowCamera(true)}
@@ -395,7 +534,7 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={!text.trim() && images.length === 0}
+              disabled={!text.trim() && images.length === 0 && docs.length === 0}
               className="shrink-0 p-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-0.5"
               title="Kirim"
             >
