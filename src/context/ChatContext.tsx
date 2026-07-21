@@ -236,12 +236,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     // Add assistant placeholder
     const assistantMessageId = generateId();
+    const streamStart = Date.now();
     const assistantMessage: Message = {
       id: assistantMessageId,
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
       isStreaming: true,
+      streamStartTime: streamStart,
     };
     dispatch({ type: 'ADD_MESSAGE', conversationId, message: assistantMessage });
     dispatch({ type: 'SET_GENERATING', isGenerating: true });
@@ -272,7 +274,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         type: 'UPDATE_MESSAGE',
         conversationId: conversationId!,
         messageId: assistantMessageId,
-        updates: { isStreaming: false },
+        updates: { isStreaming: false, streamDuration: Math.round((Date.now() - streamStart) / 100) / 10 },
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -280,7 +282,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           type: 'UPDATE_MESSAGE',
           conversationId: conversationId!,
           messageId: assistantMessageId,
-          updates: { isStreaming: false },
+          updates: { isStreaming: false, streamDuration: Math.round((Date.now() - streamStart) / 100) / 10 },
         });
       } else {
         const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan. Silakan coba lagi.';
@@ -292,6 +294,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             content: `⚠️ ${errorMessage}`,
             isStreaming: false,
             isError: true,
+            streamDuration: Math.round((Date.now() - streamStart) / 100) / 10,
           },
         });
       }
@@ -316,12 +319,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     // Add new assistant placeholder
     const assistantMessageId = generateId();
+    const streamStart = Date.now();
     const assistantMessage: Message = {
       id: assistantMessageId,
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
       isStreaming: true,
+      streamStartTime: streamStart,
     };
     dispatch({ type: 'ADD_MESSAGE', conversationId, message: assistantMessage });
     dispatch({ type: 'SET_GENERATING', isGenerating: true });
@@ -345,7 +350,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         type: 'UPDATE_MESSAGE',
         conversationId,
         messageId: assistantMessageId,
-        updates: { isStreaming: false },
+        updates: { isStreaming: false, streamDuration: Math.round((Date.now() - streamStart) / 100) / 10 },
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -353,7 +358,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           type: 'UPDATE_MESSAGE',
           conversationId,
           messageId: assistantMessageId,
-          updates: { isStreaming: false },
+          updates: { isStreaming: false, streamDuration: Math.round((Date.now() - streamStart) / 100) / 10 },
         });
       } else {
         const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan.';
@@ -365,6 +370,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             content: `⚠️ ${errorMessage}`,
             isStreaming: false,
             isError: true,
+            streamDuration: Math.round((Date.now() - streamStart) / 100) / 10,
           },
         });
       }

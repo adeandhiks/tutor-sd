@@ -10,6 +10,8 @@ export interface Message {
   audioTranscript?: string;
   isStreaming?: boolean;
   isError?: boolean;
+  streamStartTime?: number;   // timestamp when streaming started
+  streamDuration?: number;    // total seconds when streaming finished
 }
 
 export interface ImageAttachment {
