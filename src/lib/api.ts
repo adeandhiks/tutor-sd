@@ -41,7 +41,30 @@ export async function* streamChat(
   messages: Message[],
   signal?: AbortSignal
 ): AsyncGenerator<string, void, unknown> {
-  const apiMessages = buildMessages(messages);
+  // Hanya kirim 6 pesan terakhir untuk konteks (hemat token, lebih cepat)
+  const recentMessages = messages.slice(-6);
+  const apiMessages = buildMessages(recentMessages);
+
+  // Dynamic max_tokens berdasarkan panjang pesan terakhir
+  const lastUserMsg = messages.filter(m => m.role === 'user').pop();
+  const inputLength = lastUserMsg?.content?.length || 0;
+  const hasImages = lastUserMsg?.images && lastUserMsg.images.length > 0;
+  const hasDocContent = lastUserMsg?.content?.includes('[Isi dokumen');
+
+  let maxTokens: number;
+  if (hasDocContent) {
+    maxTokens = 2048; // Dokumen butuh jawaban panjang
+  } else if (hasImages) {
+    maxTokens = 1024; // Gambar butuh deskripsi
+  } else if (inputLength <= 30) {
+    maxTokens = 256;  // Sapaan/pertanyaan singkat
+  } else if (inputLength <= 100) {
+    maxTokens = 512;  // Pertanyaan pendek
+  } else if (inputLength <= 300) {
+    maxTokens = 1024; // Pertanyaan sedang
+  } else {
+    maxTokens = 2048; // Pertanyaan panjang/kompleks
+  }
 
   const response = await fetch(`${API_CONFIG.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -54,7 +77,7 @@ export async function* streamChat(
       messages: apiMessages,
       stream: true,
       temperature: 0.6,
-      max_tokens: 2048,
+      max_tokens: maxTokens,
     }),
     signal,
   });
