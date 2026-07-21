@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { SUBJECTS } from '@/lib/constants';
 import { useChat } from '@/context/ChatContext';
 import { Sparkles } from 'lucide-react';
+import { VisitorStats } from '@/components/shared/VisitorStats';
 
 export function WelcomeScreen() {
   const { sendMessage } = useChat();
@@ -38,6 +39,9 @@ export function WelcomeScreen() {
           <span>Klik salah satu mata pelajaran untuk mulai</span>
         </div>
       </motion.div>
+
+      {/* Visitor Stats */}
+      <VisitorStats />
 
       {/* Subject Cards Grid */}
       <motion.div
