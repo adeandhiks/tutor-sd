@@ -53,8 +53,8 @@ export async function* streamChat(
       model: API_CONFIG.model,
       messages: apiMessages,
       stream: true,
-      temperature: 0.7,
-      max_tokens: 4096,
+      temperature: 0.6,
+      max_tokens: 2048,
     }),
     signal,
   });
