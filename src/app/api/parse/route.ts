@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+import { validateFileSecurity, sanitizeFilename, scanContentForThreats } from '@/lib/file-security';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,16 +10,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File tidak ditemukan' }, { status: 400 });
     }
 
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const cleanFilename = sanitizeFilename(file.name);
+
+    // === SECURITY CHECK ===
+    const securityCheck = validateFileSecurity(cleanFilename, buffer, 'document');
+    if (!securityCheck.safe) {
+      console.warn(`[SECURITY] File ditolak: ${file.name} — ${securityCheck.threat}`);
       return NextResponse.json(
-        { error: `Ukuran file terlalu besar. Maksimal 2 MB, file Anda ${(file.size / 1024 / 1024).toFixed(1)} MB.` },
+        { error: securityCheck.error },
         { status: 400 }
       );
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const fileName = file.name.toLowerCase();
+    const fileName = cleanFilename.toLowerCase();
     let text = '';
 
     // --- PDF ---
@@ -114,6 +117,16 @@ export async function POST(req: NextRequest) {
     if (!text.trim()) {
       return NextResponse.json(
         { error: 'Tidak dapat mengekstrak teks dari file. File mungkin kosong atau berisi gambar saja.' },
+        { status: 400 }
+      );
+    }
+
+    // === CONTENT THREAT SCAN ===
+    const contentCheck = scanContentForThreats(text);
+    if (!contentCheck.safe) {
+      console.warn(`[SECURITY] Konten berbahaya terdeteksi dalam: ${file.name} — ${contentCheck.threat}`);
+      return NextResponse.json(
+        { error: contentCheck.error },
         { status: 400 }
       );
     }
