@@ -1,105 +1,130 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Wifi } from 'lucide-react';
+import { Users, Wifi, AlertCircle } from 'lucide-react';
 
-// Simple visitor tracking using localStorage
-function getVisitorStats() {
-  const STORAGE_KEY = 'cerdasik_visitor_stats';
-  const LAUNCH_DATE = new Date('2025-07-20').getTime();
-
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const now = Date.now();
-    let stats = stored ? JSON.parse(stored) : null;
-
-    if (!stats) {
-      // First visit — initialize
-      stats = {
-        firstVisit: now,
-        totalVisits: 1,
-        lastVisit: now,
-        uniqueId: Math.random().toString(36).substring(2, 10),
-      };
-    } else {
-      // Returning visit
-      stats.totalVisits += 1;
-      stats.lastVisit = now;
-    }
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
-
-    // Calculate "total users" — base count + time-based growth
-    const daysSinceLaunch = Math.max(1, Math.floor((now - LAUNCH_DATE) / (1000 * 60 * 60 * 24)));
-    const baseUsers = 147; // starting base
-    const growthRate = 12; // users per day average
-    const totalUsers = baseUsers + (daysSinceLaunch * growthRate) + Math.floor(Math.sin(daysSinceLaunch) * 15);
-
-    // Calculate "online now" — varies by time of day
-    const hour = new Date().getHours();
-    const minuteSeed = Math.floor(Date.now() / 60000); // changes every minute
-    // More users during school/study hours (7-21), fewer at night
-    let baseOnline: number;
-    if (hour >= 7 && hour <= 12) baseOnline = 8; // morning study
-    else if (hour >= 13 && hour <= 17) baseOnline = 12; // afternoon
-    else if (hour >= 18 && hour <= 21) baseOnline = 15; // evening study peak
-    else baseOnline = 3; // night/early morning
-
-    // Add natural fluctuation
-    const fluctuation = ((minuteSeed * 7 + 13) % 5) - 2; // -2 to +2
-    const onlineNow = Math.max(1, baseOnline + fluctuation);
-
-    return { totalUsers, onlineNow };
-  } catch {
-    return { totalUsers: 234, onlineNow: 5 };
+// Generate or retrieve a persistent visitor ID
+function getVisitorId(): string {
+  const KEY = 'cerdasik_visitor_id';
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = `v_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    localStorage.setItem(KEY, id);
   }
+  return id;
 }
 
 // Animated number counter
-function AnimatedNumber({ value, duration = 1500 }: { value: number; duration?: number }) {
+function AnimatedNumber({ value, duration = 1200 }: { value: number; duration?: number }) {
   const [displayed, setDisplayed] = useState(0);
+  const prevValue = useRef(0);
 
   useEffect(() => {
+    const start = prevValue.current;
+    const diff = value - start;
+    if (diff === 0) return;
+
     let startTime: number;
-    let animationFrame: number;
+    let frame: number;
 
     const animate = (currentTime: number) => {
       if (!startTime) startTime = currentTime;
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayed(Math.floor(eased * value));
+      
+      setDisplayed(Math.floor(start + diff * eased));
 
       if (progress < 1) {
-        animationFrame = requestAnimationFrame(animate);
+        frame = requestAnimationFrame(animate);
+      } else {
+        prevValue.current = value;
       }
     };
 
-    animationFrame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationFrame);
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
   }, [value, duration]);
 
   return <>{displayed.toLocaleString('id-ID')}</>;
 }
 
 export function VisitorStats() {
-  const [stats, setStats] = useState<{ totalUsers: number; onlineNow: number } | null>(null);
+  const [stats, setStats] = useState({ totalVisitors: 0, onlineNow: 0 });
+  const [configured, setConfigured] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+
+  // Fetch stats from API
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/stats');
+      const data = await res.json();
+      setStats({ totalVisitors: data.totalVisitors || 0, onlineNow: data.onlineNow || 0 });
+      setConfigured(data.configured !== false);
+      setLoaded(true);
+    } catch {
+      setLoaded(true);
+    }
+  };
+
+  // Send heartbeat to track online presence
+  const sendHeartbeat = async (action: 'visit' | 'heartbeat') => {
+    try {
+      const visitorId = getVisitorId();
+      await fetch('/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId, action }),
+      });
+    } catch {
+      // Silent fail
+    }
+  };
 
   useEffect(() => {
-    setStats(getVisitorStats());
+    // Initial visit registration + fetch stats
+    sendHeartbeat('visit').then(() => fetchStats());
 
-    // Update online count every minute
-    const interval = setInterval(() => {
-      setStats(getVisitorStats());
+    // Heartbeat every 60 seconds to maintain online presence
+    const heartbeatInterval = setInterval(() => {
+      sendHeartbeat('heartbeat');
     }, 60000);
 
-    return () => clearInterval(interval);
+    // Refresh stats every 30 seconds
+    const statsInterval = setInterval(() => {
+      fetchStats();
+    }, 30000);
+
+    // Send leave signal on page close
+    const handleBeforeUnload = () => {
+      const visitorId = getVisitorId();
+      navigator.sendBeacon('/api/stats', JSON.stringify({ visitorId, action: 'leave' }));
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+      clearInterval(statsInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
-  if (!stats) return null;
+  if (!loaded) return null;
+
+  // If Upstash is not configured, show setup hint
+  if (!configured) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-2 mt-4 px-4 py-2 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs"
+      >
+        <AlertCircle className="w-4 h-4 shrink-0" />
+        <span>Statistik pengunjung belum aktif. Setup Upstash Redis untuk mengaktifkan.</span>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -108,14 +133,14 @@ export function VisitorStats() {
       transition={{ duration: 0.5, delay: 0.3 }}
       className="flex items-center justify-center gap-4 sm:gap-6 mt-4"
     >
-      {/* Total Users */}
+      {/* Total Visitors */}
       <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-surface/80 border border-border backdrop-blur-sm">
         <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
           <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
         </div>
         <div className="text-left">
           <div className="text-base font-bold text-foreground leading-tight">
-            <AnimatedNumber value={stats.totalUsers} />
+            <AnimatedNumber value={stats.totalVisitors} />
           </div>
           <div className="text-[10px] text-muted-foreground leading-tight">
             Total Pengunjung
@@ -127,7 +152,6 @@ export function VisitorStats() {
       <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-surface/80 border border-border backdrop-blur-sm">
         <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30 relative">
           <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
-          {/* Pulsing dot */}
           <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-surface">
             <span className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75" />
           </span>
