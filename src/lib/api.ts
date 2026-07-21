@@ -1,5 +1,5 @@
 import { SYSTEM_PROMPT, API_CONFIG } from './constants';
-import { APIMessage, APIMessageContent, Message, ImageAttachment } from './types';
+import { APIMessage, APIMessageContent, Message } from './types';
 
 function buildMessages(messages: Message[]): APIMessage[] {
   const apiMessages: APIMessage[] = [
@@ -41,96 +41,98 @@ export async function* streamChat(
   messages: Message[],
   signal?: AbortSignal
 ): AsyncGenerator<string, void, unknown> {
-  // Hanya kirim 6 pesan terakhir untuk konteks (hemat token, lebih cepat)
-  const recentMessages = messages.slice(-6);
+  // Kirim 10 pesan terakhir untuk konteks
+  const recentMessages = messages.slice(-10);
   const apiMessages = buildMessages(recentMessages);
 
-  // Dynamic max_tokens berdasarkan panjang pesan terakhir
-  const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-  const inputLength = lastUserMsg?.content?.length || 0;
-  const hasImages = lastUserMsg?.images && lastUserMsg.images.length > 0;
-  const hasDocContent = lastUserMsg?.content?.includes('[Isi dokumen');
+  // Timeout 15 detik — jika server tidak merespons, langsung error
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-  let maxTokens: number;
-  if (hasDocContent) {
-    maxTokens = 2048; // Dokumen butuh jawaban panjang
-  } else if (hasImages) {
-    maxTokens = 1024; // Gambar butuh deskripsi
-  } else if (inputLength <= 30) {
-    maxTokens = 256;  // Sapaan/pertanyaan singkat
-  } else if (inputLength <= 100) {
-    maxTokens = 512;  // Pertanyaan pendek
-  } else if (inputLength <= 300) {
-    maxTokens = 1024; // Pertanyaan sedang
-  } else {
-    maxTokens = 2048; // Pertanyaan panjang/kompleks
-  }
-
-  const response = await fetch(`${API_CONFIG.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_CONFIG.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: API_CONFIG.model,
-      messages: apiMessages,
-      stream: true,
-      temperature: 0.6,
-      max_tokens: maxTokens,
-    }),
-    signal,
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error('API Key tidak valid. Pastikan API Key sudah benar di pengaturan.');
-    } else if (response.status === 429) {
-      throw new Error('Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi ya! ⏳');
-    } else if (response.status === 500) {
-      throw new Error('Server AI sedang bermasalah. Coba lagi nanti ya! 🔧');
-    } else if (response.status === 503) {
-      throw new Error('Server AI sedang sibuk. Coba lagi dalam beberapa saat. 🔄');
-    } else {
-      throw new Error(`Terjadi kesalahan (${response.status}). Coba lagi nanti.`);
-    }
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
-
-  const decoder = new TextDecoder();
-  let buffer = '';
+  // Gabungkan signal user (tombol stop) dengan timeout
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, controller.signal])
+    : controller.signal;
 
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    const response = await fetch(`${API_CONFIG.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: API_CONFIG.model,
+        messages: apiMessages,
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 4096,
+      }),
+      signal: combinedSignal,
+    });
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+    clearTimeout(timeout); // Server merespons, cancel timeout
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-        
-        const data = trimmed.slice(6);
-        if (data === '[DONE]') return;
-
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) {
-            yield content;
-          }
-        } catch {
-          // Skip invalid JSON chunks
-        }
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('API Key tidak valid. Pastikan API Key sudah benar di pengaturan.');
+      } else if (response.status === 429) {
+        throw new Error('Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi ya! ⏳');
+      } else if (response.status === 500) {
+        throw new Error('Server AI sedang bermasalah. Coba lagi nanti ya! 🔧');
+      } else if (response.status === 503) {
+        throw new Error('Server AI sedang sibuk. Coba lagi dalam beberapa saat. 🔄');
+      } else {
+        throw new Error(`Terjadi kesalahan (${response.status}). Coba lagi nanti.`);
       }
     }
-  } finally {
-    reader.releaseLock();
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') return;
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              yield content;
+            }
+          } catch {
+            // Skip invalid JSON chunks
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === 'AbortError') {
+      // Cek apakah timeout atau user cancel
+      if (signal?.aborted) {
+        throw error; // User menekan tombol stop
+      }
+      throw new Error('Server AI terlalu lama merespons (>15 detik). Coba lagi ya! 🔄');
+    }
+    throw error;
   }
 }
 
