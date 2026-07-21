@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.7",
     "framer-motion": "^12.42.2",
     "highlight.js": "^11.11.1",
     "html2pdf.js": "^0.14.0",
