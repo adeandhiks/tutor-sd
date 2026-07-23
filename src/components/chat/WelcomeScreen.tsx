@@ -36,6 +36,30 @@ export function WelcomeScreen() {
 
       {/* Visitor Stats */}
       <VisitorStats />
+
+      {/* Developer Info */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.8, duration: 0.5 }}
+        className="mt-6 text-center text-xs text-muted-foreground"
+      >
+        <p>
+          Pengembang:{' '}
+          <span className="font-medium text-foreground/70">Adam Puspabhuana.com</span>
+        </p>
+        <p className="mt-1">
+          Website:{' '}
+          <a
+            href="https://adambhuana.my.id"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline font-medium"
+          >
+            adambhuana.my.id
+          </a>
+        </p>
+      </motion.div>
     </div>
   );
 }
