@@ -46,7 +46,7 @@ export function WelcomeScreen() {
       >
         <p>
           Pengembang:{' '}
-          <span className="font-medium text-foreground/70">Adam Puspabhuana.com</span>
+          <span className="font-medium text-foreground/70">Adam Puspabhuana</span>
         </p>
         <p className="mt-1">
           Website:{' '}
