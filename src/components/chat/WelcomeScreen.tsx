@@ -2,14 +2,9 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { SUBJECTS } from '@/lib/constants';
-import { useChat } from '@/context/ChatContext';
-import { Sparkles } from 'lucide-react';
 import { VisitorStats } from '@/components/shared/VisitorStats';
 
 export function WelcomeScreen() {
-  const { sendMessage } = useChat();
-
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-8">
       {/* Hero Section */}
@@ -34,49 +29,13 @@ export function WelcomeScreen() {
         <p className="text-muted-foreground text-base md:text-lg max-w-md mx-auto">
           Belajar jadi mudah, pintar jadi seru! 📚
         </p>
-        <div className="flex items-center justify-center gap-2 mt-3 text-sm text-muted-foreground">
-          <Sparkles className="w-4 h-4 text-amber-500" />
-          <span>Klik salah satu mata pelajaran untuk mulai</span>
-        </div>
+        <p className="text-muted-foreground text-sm mt-2 max-w-md mx-auto">
+          Ketik pertanyaanmu di bawah untuk mulai belajar ✨
+        </p>
       </motion.div>
 
       {/* Visitor Stats */}
       <VisitorStats />
-
-      {/* Subject Cards Grid */}
-      <motion.div
-        initial="hidden"
-        animate="visible"
-        variants={{
-          visible: { transition: { staggerChildren: 0.05 } },
-        }}
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-4xl w-full"
-      >
-        {SUBJECTS.map((subject) => (
-          <motion.button
-            key={subject.id}
-            variants={{
-              hidden: { opacity: 0, y: 20, scale: 0.95 },
-              visible: { opacity: 1, y: 0, scale: 1 },
-            }}
-            whileHover={{ scale: 1.03, y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => sendMessage(subject.examples[0])}
-            className={`relative group p-4 rounded-2xl bg-gradient-to-br ${subject.gradient} text-white shadow-lg hover:shadow-xl transition-shadow overflow-hidden`}
-          >
-            {/* Glow effect */}
-            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors rounded-2xl" />
-            
-            <div className="relative z-10">
-              <div className="text-3xl mb-2">{subject.icon}</div>
-              <div className="font-semibold text-sm mb-1">{subject.name}</div>
-              <div className="text-xs text-white/80 line-clamp-2 leading-relaxed">
-                &ldquo;{subject.examples[0]}&rdquo;
-              </div>
-            </div>
-          </motion.button>
-        ))}
-      </motion.div>
     </div>
   );
 }
