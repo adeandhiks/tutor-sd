@@ -232,13 +232,32 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
     finalTranscriptRef.current = '';
     setLiveTranscript('');
 
+    // Silence detection: auto-stop after 2 seconds of no speech
+    let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const resetSilenceTimer = () => {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        // User stopped speaking for 2 seconds — auto stop
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+        }
+      }, 2000);
+    };
+
     recognition.onstart = () => {
       setIsRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
-      toast('Mulai merekam... Silakan berbicara 🎤', 'info');
+      toast('Mulai merekam... Bicara lalu diam 2 detik untuk kirim otomatis 🎤', 'info');
+      // Start initial silence timer (10s timeout if no speech at all)
+      silenceTimer = setTimeout(() => {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+        }
+      }, 10000);
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -260,10 +279,14 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
 
       // Show live transcript (final + interim)
       setLiveTranscript(finalTranscriptRef.current + interim);
+
+      // Reset silence timer every time speech is detected
+      resetSilenceTimer();
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('Speech recognition error:', event.error);
+      if (silenceTimer) clearTimeout(silenceTimer);
       
       if (event.error === 'no-speech') {
         toast('Tidak terdeteksi suara. Coba bicara lebih dekat ke mikrofon.', 'error');
@@ -279,15 +302,15 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
     };
 
     recognition.onend = () => {
-      // Recognition ended (either by user or automatically)
+      if (silenceTimer) clearTimeout(silenceTimer);
+      // Recognition ended — auto send
       const transcript = finalTranscriptRef.current.trim();
       
       cleanupRecording();
 
       if (transcript) {
-        // Auto-send the transcribed text
         sendMessage(transcript, undefined, transcript);
-        toast('Suara berhasil dikenali! 🎤', 'success');
+        toast('Suara terkirim otomatis! 🎤✨', 'success');
       }
     };
 
@@ -431,13 +454,16 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
               <div className="flex items-center gap-3 px-4 py-2">
                 <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-sm text-red-600 dark:text-red-400 font-medium">
-                  Merekam... {formatTime(recordingTime)}
+                  🎙️ Mendengarkan... {formatTime(recordingTime)}
+                </span>
+                <span className="text-[10px] text-muted-foreground ml-auto hidden sm:inline">
+                  Diam 2 detik = kirim otomatis
                 </span>
                 <button
                   onClick={stopRecording}
-                  className="ml-auto px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
+                  className="px-2 py-0.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors"
                 >
-                  Selesai
+                  Kirim sekarang
                 </button>
               </div>
               {/* Live Transcript Preview */}
