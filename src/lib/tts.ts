@@ -43,24 +43,30 @@ export function speakText(text: string, lang?: string): void {
   const cleanText = stripMarkdown(text);
   if (!cleanText) return;
 
-  // Limit text length for performance (max ~500 chars at a time)
-  const maxChars = 500;
+  // Limit text length (max ~1000 chars)
+  const maxChars = 1000;
   const truncatedText = cleanText.length > maxChars 
     ? cleanText.substring(0, maxChars) + '...' 
     : cleanText;
 
   const utterance = new SpeechSynthesisUtterance(truncatedText);
   utterance.lang = lang || detectLanguage(cleanText);
-  utterance.rate = 0.9;  // Slightly slower for kids
-  utterance.pitch = 1.1; // Slightly higher pitch for friendly tone
+  utterance.rate = 1.0;   // Kecepatan normal seperti guru
+  utterance.pitch = 1.15; // Sedikit tinggi, nada hangat & ramah
   utterance.volume = 1;
 
-  // Try to find a good voice for the language
+  // Cari suara yang cocok — prefer female untuk nada guru yang hangat
   const voices = speechSynthesis.getVoices();
   const langPrefix = utterance.lang.split('-')[0];
-  const matchingVoice = voices.find(v => v.lang.startsWith(langPrefix));
-  if (matchingVoice) {
-    utterance.voice = matchingVoice;
+  const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
+  
+  // Prioritas: female > default
+  const femaleVoice = langVoices.find(v => 
+    /female|wanita|perempuan|zira|haruka|google.*id/i.test(v.name)
+  );
+  const bestVoice = femaleVoice || langVoices[0];
+  if (bestVoice) {
+    utterance.voice = bestVoice;
   }
 
   currentUtterance = utterance;
