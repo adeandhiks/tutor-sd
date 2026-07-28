@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -9,7 +9,8 @@ import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import { Message } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
-import { Clock, Zap } from 'lucide-react';
+import { useChat } from '@/context/ChatContext';
+import { Clock, Zap, Pencil, Check, X } from 'lucide-react';
 
 interface ChatBubbleProps {
   message: Message;
@@ -37,11 +38,45 @@ function useStreamTimer(isStreaming?: boolean, startTime?: number) {
 
 export function ChatBubble({ message }: ChatBubbleProps) {
   const [showTime, setShowTime] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.content);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+  const { editMessage, isGenerating } = useChat();
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const elapsed = useStreamTimer(message.isStreaming, message.streamStartTime);
 
   if (message.role === 'system') return null;
+
+  const handleStartEdit = () => {
+    setEditText(message.content);
+    setIsEditing(true);
+    setTimeout(() => editRef.current?.focus(), 50);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = editText.trim();
+    if (!trimmed || trimmed === message.content) {
+      setIsEditing(false);
+      return;
+    }
+    setIsEditing(false);
+    editMessage(message.id, trimmed);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditText(message.content);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
 
   return (
     <motion.div
@@ -108,6 +143,34 @@ export function ChatBubble({ message }: ChatBubbleProps) {
                 {elapsed.toFixed(1)}s
               </span>
             </div>
+          ) : isUser && isEditing ? (
+            /* Inline edit mode */
+            <div className="min-w-[200px]">
+              <textarea
+                ref={editRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent text-sm leading-relaxed resize-none outline-none min-h-[40px] text-user-bubble-foreground placeholder:text-user-bubble-foreground/50"
+                rows={Math.min(editText.split('\n').length + 1, 6)}
+              />
+              <div className="flex items-center justify-end gap-1 mt-1 pt-1 border-t border-white/20">
+                <button
+                  onClick={handleSaveEdit}
+                  className="p-1 rounded-md hover:bg-white/20 transition-colors"
+                  title="Simpan (Enter)"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="p-1 rounded-md hover:bg-white/20 transition-colors"
+                  title="Batal (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           ) : isUser ? (
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
           ) : (
@@ -124,6 +187,20 @@ export function ChatBubble({ message }: ChatBubbleProps) {
             </div>
           )}
         </div>
+
+        {/* Edit button for user messages */}
+        {isUser && !isEditing && !isGenerating && (
+          <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mt-1`}>
+            <button
+              onClick={handleStartEdit}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-muted"
+              title="Edit pesan"
+            >
+              <Pencil className="w-3 h-3" />
+              <span>Edit</span>
+            </button>
+          </div>
+        )}
 
         {/* Streaming timer (while content is flowing) */}
         {isAssistant && message.isStreaming && message.content && (
@@ -155,7 +232,7 @@ export function ChatBubble({ message }: ChatBubbleProps) {
         )}
 
         {/* Timestamp */}
-        {showTime && (
+        {showTime && !isEditing && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

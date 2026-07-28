@@ -17,6 +17,7 @@ interface ChatContextType {
   createNewChat: () => void;
   setActiveConversation: (id: string) => void;
   sendMessage: (content: string, images?: ImageAttachment[], audioTranscript?: string) => Promise<void>;
+  editMessage: (messageId: string, newContent: string) => Promise<void>;
   regenerateLastResponse: () => Promise<void>;
   stopGenerating: () => void;
   deleteConversation: (id: string) => void;
@@ -37,7 +38,8 @@ type ChatAction =
   | { type: 'SET_SIDEBAR'; open: boolean }
   | { type: 'ADD_MESSAGE'; conversationId: string; message: Message }
   | { type: 'UPDATE_MESSAGE'; conversationId: string; messageId: string; updates: Partial<Message> }
-  | { type: 'REMOVE_LAST_MESSAGE'; conversationId: string };
+  | { type: 'REMOVE_LAST_MESSAGE'; conversationId: string }
+  | { type: 'TRUNCATE_AFTER'; conversationId: string; messageId: string };
 
 interface ChatState {
   conversations: Conversation[];
@@ -104,6 +106,17 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : c
         ),
       };
+    case 'TRUNCATE_AFTER': {
+      return {
+        ...state,
+        conversations: state.conversations.map(c => {
+          if (c.id !== action.conversationId) return c;
+          const idx = c.messages.findIndex(m => m.id === action.messageId);
+          if (idx === -1) return c;
+          return { ...c, messages: c.messages.slice(0, idx + 1) };
+        }),
+      };
+    }
     default:
       return state;
   }
@@ -122,6 +135,7 @@ const ChatContext = createContext<ChatContextType>({
   createNewChat: noop,
   setActiveConversation: noop,
   sendMessage: noopAsync,
+  editMessage: noopAsync,
   regenerateLastResponse: noopAsync,
   stopGenerating: noop,
   deleteConversation: noop,
@@ -304,6 +318,96 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.activeConversationId, state.conversations]);
 
+  const editMessage = useCallback(async (messageId: string, newContent: string) => {
+    if (!activeConversation || state.isGenerating) return;
+
+    const conversationId = activeConversation.id;
+
+    // Update the user message content
+    dispatch({
+      type: 'UPDATE_MESSAGE',
+      conversationId,
+      messageId,
+      updates: { content: newContent },
+    });
+
+    // Remove all messages after this one
+    dispatch({ type: 'TRUNCATE_AFTER', conversationId, messageId });
+
+    // Get messages up to and including the edited message
+    const msgIdx = activeConversation.messages.findIndex(m => m.id === messageId);
+    if (msgIdx === -1) return;
+
+    const messagesUpToEdited = activeConversation.messages.slice(0, msgIdx).map(m => ({ ...m }));
+    const editedMsg: Message = {
+      ...activeConversation.messages[msgIdx],
+      content: newContent,
+    };
+    messagesUpToEdited.push(editedMsg);
+
+    // Add new assistant placeholder
+    const assistantMessageId = generateId();
+    const streamStart = Date.now();
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      isStreaming: true,
+      streamStartTime: streamStart,
+    };
+    dispatch({ type: 'ADD_MESSAGE', conversationId, message: assistantMessage });
+    dispatch({ type: 'SET_GENERATING', isGenerating: true });
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      let fullContent = '';
+      for await (const chunk of streamChat(messagesUpToEdited, abortController.signal)) {
+        fullContent += chunk;
+        dispatch({
+          type: 'UPDATE_MESSAGE',
+          conversationId,
+          messageId: assistantMessageId,
+          updates: { content: fullContent },
+        });
+      }
+
+      dispatch({
+        type: 'UPDATE_MESSAGE',
+        conversationId,
+        messageId: assistantMessageId,
+        updates: { isStreaming: false, streamDuration: Math.round((Date.now() - streamStart) / 100) / 10 },
+      });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        dispatch({
+          type: 'UPDATE_MESSAGE',
+          conversationId,
+          messageId: assistantMessageId,
+          updates: { isStreaming: false, streamDuration: Math.round((Date.now() - streamStart) / 100) / 10 },
+        });
+      } else {
+        const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan.';
+        dispatch({
+          type: 'UPDATE_MESSAGE',
+          conversationId,
+          messageId: assistantMessageId,
+          updates: {
+            content: `⚠️ ${errorMessage}`,
+            isStreaming: false,
+            isError: true,
+            streamDuration: Math.round((Date.now() - streamStart) / 100) / 10,
+          },
+        });
+      }
+    } finally {
+      dispatch({ type: 'SET_GENERATING', isGenerating: false });
+      abortControllerRef.current = null;
+    }
+  }, [activeConversation, state.isGenerating]);
+
   const regenerateLastResponse = useCallback(async () => {
     if (!activeConversation || activeConversation.messages.length < 2) return;
 
@@ -414,6 +518,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         createNewChat,
         setActiveConversation,
         sendMessage,
+        editMessage,
         regenerateLastResponse,
         stopGenerating,
         deleteConversation,
