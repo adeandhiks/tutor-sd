@@ -228,6 +228,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Add user message
+    const isVoice = !!audioTranscript;
     const userMessage: Message = {
       id: generateId(),
       role: 'user',
@@ -235,6 +236,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       timestamp: Date.now(),
       images,
       audioTranscript,
+      isVoiceInput: isVoice,
     };
     dispatch({ type: 'ADD_MESSAGE', conversationId, message: userMessage });
 
@@ -258,6 +260,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       timestamp: Date.now(),
       isStreaming: true,
       streamStartTime: streamStart,
+      isVoiceInput: isVoice, // carry voice flag for auto-TTS
     };
     dispatch({ type: 'ADD_MESSAGE', conversationId, message: assistantMessage });
     dispatch({ type: 'SET_GENERATING', isGenerating: true });

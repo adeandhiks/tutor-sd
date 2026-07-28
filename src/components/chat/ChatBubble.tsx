@@ -10,7 +10,8 @@ import rehypeHighlight from 'rehype-highlight';
 import { Message } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { useChat } from '@/context/ChatContext';
-import { Clock, Zap, Pencil, Check, X } from 'lucide-react';
+import { speakText, stopSpeaking, isTTSSupported } from '@/lib/tts';
+import { Clock, Zap, Pencil, Check, X, Volume2, VolumeX } from 'lucide-react';
 
 interface ChatBubbleProps {
   message: Message;
@@ -40,11 +41,46 @@ export function ChatBubble({ message }: ChatBubbleProps) {
   const [showTime, setShowTime] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
+  const [isSpeakingState, setIsSpeakingState] = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const hasAutoPlayed = useRef(false);
   const { editMessage, isGenerating } = useChat();
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const elapsed = useStreamTimer(message.isStreaming, message.streamStartTime);
+  const ttsSupported = isTTSSupported();
+
+  // Auto-play TTS when voice-initiated AI response finishes streaming
+  useEffect(() => {
+    if (
+      isAssistant &&
+      message.isVoiceInput &&
+      !message.isStreaming &&
+      message.content &&
+      !message.isError &&
+      !hasAutoPlayed.current &&
+      ttsSupported
+    ) {
+      hasAutoPlayed.current = true;
+      // Small delay to let the UI settle
+      const timer = setTimeout(() => {
+        speakText(message.content);
+        setIsSpeakingState(true);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isAssistant, message.isVoiceInput, message.isStreaming, message.content, message.isError, ttsSupported]);
+
+  // Monitor speaking state
+  useEffect(() => {
+    if (!isSpeakingState) return;
+    const interval = setInterval(() => {
+      if (!window.speechSynthesis.speaking) {
+        setIsSpeakingState(false);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isSpeakingState]);
 
   if (message.role === 'system') return null;
 
@@ -75,6 +111,16 @@ export function ChatBubble({ message }: ChatBubbleProps) {
       handleSaveEdit();
     } else if (e.key === 'Escape') {
       handleCancelEdit();
+    }
+  };
+
+  const handleToggleTTS = () => {
+    if (isSpeakingState) {
+      stopSpeaking();
+      setIsSpeakingState(false);
+    } else {
+      speakText(message.content);
+      setIsSpeakingState(true);
     }
   };
 
@@ -188,9 +234,10 @@ export function ChatBubble({ message }: ChatBubbleProps) {
           )}
         </div>
 
-        {/* Edit button for user messages */}
-        {isUser && !isEditing && !isGenerating && (
-          <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mt-1`}>
+        {/* Action buttons row */}
+        <div className={`flex items-center gap-2 mt-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+          {/* Edit button for user messages */}
+          {isUser && !isEditing && !isGenerating && (
             <button
               onClick={handleStartEdit}
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded-md hover:bg-muted"
@@ -199,8 +246,33 @@ export function ChatBubble({ message }: ChatBubbleProps) {
               <Pencil className="w-3 h-3" />
               <span>Edit</span>
             </button>
-          </div>
-        )}
+          )}
+
+          {/* TTS button for assistant messages */}
+          {isAssistant && !message.isStreaming && message.content && !message.isError && ttsSupported && (
+            <button
+              onClick={handleToggleTTS}
+              className={`flex items-center gap-1 text-[10px] transition-colors px-1.5 py-0.5 rounded-md hover:bg-muted ${
+                isSpeakingState 
+                  ? 'text-primary font-medium' 
+                  : 'text-muted-foreground hover:text-primary'
+              }`}
+              title={isSpeakingState ? 'Hentikan suara' : 'Dengarkan jawaban'}
+            >
+              {isSpeakingState ? (
+                <>
+                  <VolumeX className="w-3 h-3" />
+                  <span>Hentikan</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-3 h-3" />
+                  <span>Dengarkan</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
 
         {/* Streaming timer (while content is flowing) */}
         {isAssistant && message.isStreaming && message.content && (
