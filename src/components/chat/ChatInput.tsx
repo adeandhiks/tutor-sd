@@ -523,18 +523,7 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
             <Camera className="w-5 h-5" />
           </button>
 
-          {/* Voice Record */}
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`shrink-0 p-1.5 rounded-lg transition-colors mb-0.5 ${
-              isRecording
-                ? 'bg-red-100 dark:bg-red-900/30 text-red-500 animate-pulse'
-                : 'hover:bg-surface-hover text-muted-foreground hover:text-foreground'
-            }`}
-            title={isRecording ? 'Hentikan rekaman' : 'Rekam suara'}
-          >
-            {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-          </button>
+
 
           {/* Text Input */}
           <TextareaAutosize
@@ -548,7 +537,22 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
             disabled={isRecording}
           />
 
-          {/* Send / Stop Button */}
+          {/* Send / Stop / Mic Buttons */}
+          <div className="flex items-center gap-1 mb-0.5">
+            {/* Voice Record */}
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              className={`shrink-0 p-2 rounded-xl transition-colors ${
+                isRecording
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : 'hover:bg-surface-hover text-muted-foreground hover:text-foreground'
+              }`}
+              title={isRecording ? 'Hentikan rekaman' : 'Rekam suara'}
+            >
+              {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+
+            {/* Send / Stop */}
           {isGenerating ? (
             <button
               onClick={stopGenerating}
@@ -567,6 +571,7 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
               <SendHorizonal className="w-4 h-4" />
             </button>
           )}
+          </div>
         </div>
 
         <p className="text-[11px] text-muted-foreground text-center mt-2">
