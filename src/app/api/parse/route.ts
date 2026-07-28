@@ -29,16 +29,32 @@ export async function POST(req: NextRequest) {
     // --- PDF ---
     if (fileName.endsWith('.pdf')) {
       try {
+        // Import langsung untuk menghindari error test file di Vercel
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require('pdf-parse');
+        const pdfParse = require('pdf-parse/lib/pdf-parse.js');
         const data = await pdfParse(buffer);
         text = data.text || '';
       } catch (e) {
         console.error('PDF parse error:', e);
-        return NextResponse.json(
-          { error: 'Gagal membaca file PDF. Pastikan file tidak rusak atau terproteksi password.' },
-          { status: 400 }
-        );
+        // Fallback: coba extract text mentah dari buffer
+        try {
+          const rawText = buffer.toString('utf-8');
+          // Cari text content di antara stream markers PDF
+          const matches = rawText.match(/\(([^)]+)\)/g);
+          if (matches && matches.length > 5) {
+            text = matches
+              .map(m => m.slice(1, -1))
+              .filter(t => t.length > 1 && !/^[\\\/\d.]+$/.test(t))
+              .join(' ');
+          }
+        } catch { /* ignore fallback error */ }
+
+        if (!text) {
+          return NextResponse.json(
+            { error: 'Gagal membaca file PDF. Pastikan file tidak rusak atau terproteksi password.' },
+            { status: 400 }
+          );
+        }
       }
     }
     // --- DOCX ---

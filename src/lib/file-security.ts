@@ -179,7 +179,7 @@ export function validateFileSecurity(
   if (buffer.length > MAX_FILE_SIZE) {
     return {
       safe: false,
-      error: `Ukuran file terlalu besar (${(buffer.length / 1024 / 1024).toFixed(1)} MB). Maksimal 2 MB.`,
+      error: `Ukuran file terlalu besar (${(buffer.length / 1024 / 1024).toFixed(1)} MB). Maksimal 10 MB.`,
       threat: 'oversized',
     };
   }

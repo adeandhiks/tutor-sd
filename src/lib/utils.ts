@@ -47,7 +47,8 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+export const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2 MB
+export const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export function validateImageFile(file: File): { valid: boolean; error?: string } {
   const acceptedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
@@ -55,7 +56,7 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
   if (!acceptedTypes.includes(file.type)) {
     return { valid: false, error: 'Format file tidak didukung. Gunakan JPG, PNG, atau WEBP.' };
   }
-  if (file.size > MAX_FILE_SIZE) {
+  if (file.size > MAX_IMAGE_SIZE) {
     return { valid: false, error: `Ukuran gambar terlalu besar (${(file.size / 1024 / 1024).toFixed(1)} MB). Maksimal 2 MB.` };
   }
   return { valid: true };
@@ -69,8 +70,8 @@ export function validateDocumentFile(file: File): { valid: boolean; error?: stri
   if (!hasValidExt) {
     return { valid: false, error: 'Format dokumen tidak didukung. Gunakan PDF, Word, Excel, atau PowerPoint.' };
   }
-  if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: `Ukuran dokumen terlalu besar (${(file.size / 1024 / 1024).toFixed(1)} MB). Maksimal 2 MB.` };
+  if (file.size > MAX_DOC_SIZE) {
+    return { valid: false, error: `Ukuran dokumen terlalu besar (${(file.size / 1024 / 1024).toFixed(1)} MB). Maksimal 10 MB.` };
   }
   return { valid: true };
 }
