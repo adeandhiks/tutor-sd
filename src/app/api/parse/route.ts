@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       try {
         const { extractText } = await import('unpdf');
         const result = await extractText(new Uint8Array(buffer));
-        text = result.text || '';
+        text = Array.isArray(result.text) ? result.text.join('\n') : String(result.text || '');
       } catch (e) {
         console.error('PDF parse error:', e);
         return NextResponse.json(
