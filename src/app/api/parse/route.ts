@@ -29,23 +29,9 @@ export async function POST(req: NextRequest) {
     // --- PDF ---
     if (fileName.endsWith('.pdf')) {
       try {
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
-        const pdf = await loadingTask.promise;
-        
-        const pages: string[] = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = content.items
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((item: any) => item.str || '')
-            .join(' ');
-          if (pageText.trim()) {
-            pages.push(pageText.trim());
-          }
-        }
-        text = pages.join('\n\n');
+        const { extractText } = await import('unpdf');
+        const result = await extractText(new Uint8Array(buffer));
+        text = result.text || '';
       } catch (e) {
         console.error('PDF parse error:', e);
         return NextResponse.json(
