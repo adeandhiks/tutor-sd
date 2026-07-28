@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
           const pageText = content.items
-            .map((item: { str?: string }) => item.str || '')
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((item: any) => item.str || '')
             .join(' ');
           if (pageText.trim()) {
             pages.push(pageText.trim());
