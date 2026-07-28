@@ -309,7 +309,21 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       cleanupRecording();
 
       if (transcript) {
-        sendMessage(transcript, undefined, transcript);
+        // Sertakan dokumen yang sudah di-upload
+        let messageText = transcript;
+        if (docs.length > 0) {
+          const docTexts = docs.map(d =>
+            `📄 [Isi dokumen "${d.name}"]:\n${d.text}${d.truncated ? '\n(... dokumen terlalu panjang, terpotong)' : ''}`
+          ).join('\n\n');
+          messageText = docTexts + `\n\n${transcript}`;
+          setDocs([]);
+        }
+        
+        // Sertakan gambar yang sudah di-upload
+        const currentImages = images.length > 0 ? [...images] : undefined;
+        if (currentImages) setImages([]);
+
+        sendMessage(messageText, currentImages, transcript);
         toast('Suara terkirim otomatis! 🎤✨', 'success');
       }
     };
