@@ -29,32 +29,28 @@ export async function POST(req: NextRequest) {
     // --- PDF ---
     if (fileName.endsWith('.pdf')) {
       try {
-        // Import langsung untuk menghindari error test file di Vercel
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require('pdf-parse/lib/pdf-parse.js');
-        const data = await pdfParse(buffer);
-        text = data.text || '';
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+        const pdf = await loadingTask.promise;
+        
+        const pages: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .map((item: { str?: string }) => item.str || '')
+            .join(' ');
+          if (pageText.trim()) {
+            pages.push(pageText.trim());
+          }
+        }
+        text = pages.join('\n\n');
       } catch (e) {
         console.error('PDF parse error:', e);
-        // Fallback: coba extract text mentah dari buffer
-        try {
-          const rawText = buffer.toString('utf-8');
-          // Cari text content di antara stream markers PDF
-          const matches = rawText.match(/\(([^)]+)\)/g);
-          if (matches && matches.length > 5) {
-            text = matches
-              .map(m => m.slice(1, -1))
-              .filter(t => t.length > 1 && !/^[\\\/\d.]+$/.test(t))
-              .join(' ');
-          }
-        } catch { /* ignore fallback error */ }
-
-        if (!text) {
-          return NextResponse.json(
-            { error: 'Gagal membaca file PDF. Pastikan file tidak rusak atau terproteksi password.' },
-            { status: 400 }
-          );
-        }
+        return NextResponse.json(
+          { error: 'Gagal membaca file PDF. Pastikan file tidak rusak atau terproteksi password.' },
+          { status: 400 }
+        );
       }
     }
     // --- DOCX ---
