@@ -28,16 +28,32 @@ export async function POST(req: NextRequest) {
 
     // --- PDF ---
     if (fileName.endsWith('.pdf')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require('pdf-parse');
-      const data = await pdfParse(buffer);
-      text = data.text || '';
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require('pdf-parse');
+        const data = await pdfParse(buffer);
+        text = data.text || '';
+      } catch (e) {
+        console.error('PDF parse error:', e);
+        return NextResponse.json(
+          { error: 'Gagal membaca file PDF. Pastikan file tidak rusak atau terproteksi password.' },
+          { status: 400 }
+        );
+      }
     }
     // --- DOCX ---
     else if (fileName.endsWith('.docx')) {
-      const mammoth = await import('mammoth');
-      const result = await mammoth.extractRawText({ buffer });
-      text = result.value || '';
+      try {
+        const mammoth = await import('mammoth');
+        const result = await mammoth.extractRawText({ buffer });
+        text = result.value || '';
+      } catch (e) {
+        console.error('DOCX parse error:', e);
+        return NextResponse.json(
+          { error: 'Gagal membaca file DOCX. Pastikan file tidak rusak.' },
+          { status: 400 }
+        );
+      }
     }
     // --- DOC (old Word) ---
     else if (fileName.endsWith('.doc')) {
@@ -52,18 +68,26 @@ export async function POST(req: NextRequest) {
     }
     // --- XLSX / XLS ---
     else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const sheets: string[] = [];
-      
-      for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName];
-        const csv = XLSX.utils.sheet_to_csv(sheet);
-        if (csv.trim()) {
-          sheets.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+      try {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheets: string[] = [];
+        
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const csv = XLSX.utils.sheet_to_csv(sheet);
+          if (csv.trim()) {
+            sheets.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+          }
         }
+        text = sheets.join('\n\n');
+      } catch (e) {
+        console.error('Excel parse error:', e);
+        return NextResponse.json(
+          { error: 'Gagal membaca file Excel. Pastikan file tidak rusak.' },
+          { status: 400 }
+        );
       }
-      text = sheets.join('\n\n');
     }
     // --- PPTX ---
     else if (fileName.endsWith('.pptx')) {
@@ -139,9 +163,10 @@ export async function POST(req: NextRequest) {
       charCount: text.trim().length,
     });
   } catch (err) {
-    console.error('Parse error:', err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error('Parse error detail:', errorMsg, err);
     return NextResponse.json(
-      { error: 'Gagal membaca file. Pastikan file tidak rusak.' },
+      { error: `Gagal membaca file: ${errorMsg}` },
       { status: 500 }
     );
   }

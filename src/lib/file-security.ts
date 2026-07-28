@@ -3,7 +3,7 @@
  * Validasi keamanan berlapis untuk mencegah file berbahaya
  */
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 // Magic bytes signature untuk verifikasi tipe file asli
 const MAGIC_SIGNATURES: Record<string, { bytes: number[]; offset: number }[]> = {
