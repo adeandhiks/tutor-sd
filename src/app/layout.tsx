@@ -12,11 +12,11 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "Cerdasik — AI Tutor SD | Belajar jadi mudah, pintar jadi seru!",
+  title: "Cerdasik - AI Tutor Sekolah | Belajar jadi mudah, pintar jadi seru!",
   description:
     "Cerdasik adalah aplikasi AI Chatbot untuk membantu siswa Sekolah Dasar (Kelas 1-6) belajar dengan cara yang menyenangkan, mudah dipahami, dan interaktif.",
   keywords: [
-    "Cerdasik", "AI Tutor SD", "Sekolah Dasar", "Belajar Anak", "Chatbot Pendidikan",
+    "Cerdasik", "AI Tutor Sekolah", "Sekolah Dasar", "Belajar Anak", "Chatbot Pendidikan",
   ],
   icons: {
     icon: "/logo.png",
