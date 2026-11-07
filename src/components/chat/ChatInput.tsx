@@ -227,7 +227,12 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       return;
     }
 
-    recognition.continuous = true;
+    // PENTING: continuous = false untuk mencegah duplikasi di browser mobile.
+    // Di mobile Chrome, continuous mode menghasilkan result "final" yang bersifat
+    // kumulatif (berisi seluruh kalimat dari awal), bukan incremental.
+    // Dengan continuous = false, recognition berhenti setelah satu utterance selesai
+    // dan menghasilkan satu result final yang bersih tanpa duplikasi.
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'id-ID'; // Bahasa Indonesia
 
@@ -236,19 +241,8 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
     isStoppingRef.current = false;
     hasProcessedRef.current = false;
 
-    // Silence detection: auto-stop after 2 seconds of no speech
-    let silenceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const resetSilenceTimer = () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => {
-        // User stopped speaking for 2 seconds — auto stop
-        if (recognitionRef.current && !isStoppingRef.current) {
-          isStoppingRef.current = true;
-          recognitionRef.current.stop();
-        }
-      }, 2000);
-    };
+    // Timeout: auto-stop jika tidak ada suara sama sekali selama 10 detik
+    let noSpeechTimer: ReturnType<typeof setTimeout> | null = null;
 
     recognition.onstart = () => {
       setIsRecording(true);
@@ -256,9 +250,9 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
-      toast('Mulai merekam... Bicara lalu diam 2 detik untuk kirim otomatis 🎤', 'info');
-      // Start initial silence timer (10s timeout if no speech at all)
-      silenceTimer = setTimeout(() => {
+      toast('Mulai merekam... Bicara sekarang 🎤', 'info');
+      // Timeout 10 detik jika tidak ada suara sama sekali
+      noSpeechTimer = setTimeout(() => {
         if (recognitionRef.current && !isStoppingRef.current) {
           isStoppingRef.current = true;
           recognitionRef.current.stop();
@@ -267,34 +261,28 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Bangun ulang seluruh transcript dari semua results,
-      // bukan akumulasi incremental — ini mencegah duplikasi
-      // yang terjadi pada browser mobile yang me-reset resultIndex
-      let fullFinal = '';
-      let interim = '';
-
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          fullFinal += result[0].transcript + ' ';
-        } else {
-          interim += result[0].transcript;
-        }
+      // Dengan continuous = false, event.results biasanya hanya punya 1 entry (index 0)
+      // yang berkembang dari interim ke final. Ambil hasil terakhir saja.
+      if (noSpeechTimer) {
+        clearTimeout(noSpeechTimer);
+        noSpeechTimer = null;
       }
 
-      // Selalu timpa (bukan append) finalTranscriptRef
-      finalTranscriptRef.current = fullFinal;
+      const lastResult = event.results[event.results.length - 1];
+      const transcript = lastResult[0].transcript;
 
-      // Show live transcript (final + interim)
-      setLiveTranscript(fullFinal + interim);
-
-      // Reset silence timer every time speech is detected
-      resetSilenceTimer();
+      if (lastResult.isFinal) {
+        finalTranscriptRef.current = transcript;
+        setLiveTranscript(transcript);
+      } else {
+        // Interim — tampilkan preview langsung
+        setLiveTranscript(transcript);
+      }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('Speech recognition error:', event.error);
-      if (silenceTimer) clearTimeout(silenceTimer);
+      if (noSpeechTimer) clearTimeout(noSpeechTimer);
       
       // Pada mobile, error 'aborted' bisa terjadi saat stop() dipanggil — abaikan
       if (event.error === 'aborted') {
@@ -315,10 +303,9 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
     };
 
     recognition.onend = () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
+      if (noSpeechTimer) clearTimeout(noSpeechTimer);
 
       // Guard: mencegah onend handler diproses berkali-kali
-      // (pada browser mobile, onend bisa terpanggil beberapa kali)
       if (hasProcessedRef.current) {
         return;
       }
@@ -494,7 +481,7 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
                   🎙️ Mendengarkan... {formatTime(recordingTime)}
                 </span>
                 <span className="text-[10px] text-muted-foreground ml-auto hidden sm:inline">
-                  Diam 2 detik = kirim otomatis
+                  Otomatis terkirim setelah selesai bicara
                 </span>
                 <button
                   onClick={stopRecording}
