@@ -69,6 +69,8 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef('');
+  const isStoppingRef = useRef(false); // Mencegah onend dipanggil berkali-kali
+  const hasProcessedRef = useRef(false); // Mencegah pengiriman pesan duplikat
 
   // Handle dropped images from DragDrop
   useEffect(() => {
@@ -231,6 +233,8 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
 
     finalTranscriptRef.current = '';
     setLiveTranscript('');
+    isStoppingRef.current = false;
+    hasProcessedRef.current = false;
 
     // Silence detection: auto-stop after 2 seconds of no speech
     let silenceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -239,7 +243,8 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       if (silenceTimer) clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         // User stopped speaking for 2 seconds — auto stop
-        if (recognitionRef.current) {
+        if (recognitionRef.current && !isStoppingRef.current) {
+          isStoppingRef.current = true;
           recognitionRef.current.stop();
         }
       }, 2000);
@@ -254,31 +259,34 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       toast('Mulai merekam... Bicara lalu diam 2 detik untuk kirim otomatis 🎤', 'info');
       // Start initial silence timer (10s timeout if no speech at all)
       silenceTimer = setTimeout(() => {
-        if (recognitionRef.current) {
+        if (recognitionRef.current && !isStoppingRef.current) {
+          isStoppingRef.current = true;
           recognitionRef.current.stop();
         }
       }, 10000);
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // Bangun ulang seluruh transcript dari semua results,
+      // bukan akumulasi incremental — ini mencegah duplikasi
+      // yang terjadi pada browser mobile yang me-reset resultIndex
+      let fullFinal = '';
       let interim = '';
-      let final = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript + ' ';
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          fullFinal += result[0].transcript + ' ';
         } else {
-          interim += transcript;
+          interim += result[0].transcript;
         }
       }
 
-      if (final) {
-        finalTranscriptRef.current += final;
-      }
+      // Selalu timpa (bukan append) finalTranscriptRef
+      finalTranscriptRef.current = fullFinal;
 
       // Show live transcript (final + interim)
-      setLiveTranscript(finalTranscriptRef.current + interim);
+      setLiveTranscript(fullFinal + interim);
 
       // Reset silence timer every time speech is detected
       resetSilenceTimer();
@@ -288,6 +296,11 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       console.error('Speech recognition error:', event.error);
       if (silenceTimer) clearTimeout(silenceTimer);
       
+      // Pada mobile, error 'aborted' bisa terjadi saat stop() dipanggil — abaikan
+      if (event.error === 'aborted') {
+        return;
+      }
+
       if (event.error === 'no-speech') {
         toast('Tidak terdeteksi suara. Coba bicara lebih dekat ke mikrofon.', 'error');
       } else if (event.error === 'not-allowed') {
@@ -303,6 +316,14 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
 
     recognition.onend = () => {
       if (silenceTimer) clearTimeout(silenceTimer);
+
+      // Guard: mencegah onend handler diproses berkali-kali
+      // (pada browser mobile, onend bisa terpanggil beberapa kali)
+      if (hasProcessedRef.current) {
+        return;
+      }
+      hasProcessedRef.current = true;
+
       // Recognition ended — auto send
       const transcript = finalTranscriptRef.current.trim();
       
@@ -338,7 +359,8 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
   };
 
   const stopRecording = () => {
-    if (recognitionRef.current) {
+    if (recognitionRef.current && !isStoppingRef.current) {
+      isStoppingRef.current = true;
       recognitionRef.current.stop();
     }
   };
@@ -351,6 +373,7 @@ export function ChatInput({ droppedImages }: ChatInputProps) {
       timerRef.current = null;
     }
     recognitionRef.current = null;
+    isStoppingRef.current = false;
   };
 
   // Cleanup on unmount
